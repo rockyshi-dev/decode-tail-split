@@ -1,0 +1,24 @@
+class GPUModelRunner:
+    def sample(self, hidden_states, input_batch, grammar_output):
+        if self.batch_sharder is not None:
+            logits = None
+        else:
+            sample_hidden_states = hidden_states[input_batch.logits_indices]
+            logits = self.model.compute_logits(sample_hidden_states)
+
+        if grammar_output is not None:
+            self.structured_outputs_worker.apply_grammar_bitmask(logits, input_batch)
+
+        sampler_output: SamplerOutput | None
+        if input_batch.num_reqs == 0:
+            sampler_output = None
+        elif input_batch.num_draft_tokens == 0 or self.rejection_sampler is None:
+            sampler_output = self.sampler(logits, input_batch)
+        return sampler_output
+
+    def execute_model(self, input_batch, dummy_run=False):
+        # Run model.
+        model_output = self.model(input_batch)
+
+        self.kv_connector.finish_forward()
+        return model_output
